@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  duckdns:
+    image: maksimstojkovic/duckdns
+    container_name: duckdns
+    environment:
+      - DUCKDNS_TOKEN=<your duckdns token>
+      - DUCKDNS_DOMAIN=<subdomain>.duckdns.org
+      - DUCKDNS_DELAY=5 #optional
+    restart: unless-stopped
+
+  letsencrypt:
+    image: maksimstojkovic/letsencrypt
+    container_name: letsencrypt
+    volumes:
+      - ./certs:/etc/letsencrypt
+    environment:
+      - DUCKDNS_TOKEN=<your duckdns token>
+      - DUCKDNS_DOMAIN=<subdomain>.duckdns.org
+      - LETSENCRYPT_DOMAIN= #optional
+      - LETSENCRYPT_WILDCARD=false #optional
+      - LETSENCRYPT_EMAIL= #optional
+      - TESTING=false #optional
+      - UID=0 #optional
+      - GID=0 #optional
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: sh -c "python3 manage.py makemigrations && python3 manage.py migrate --noinput && python3 manage.py collectstatic --noinput && python /code/manage.py runserver 0.0.0.0:8000"
+    restart: always
+    volumes:
+      - .:/code
+    ports:
+      - 8000:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  nginx:
+    image: nginx:latest
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certs:/etc/letsencrypt:ro
+    depends_on:
+      - letsencrypt
+      - web
